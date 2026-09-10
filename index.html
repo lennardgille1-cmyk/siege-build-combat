@@ -1,0 +1,1645 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>SIEGE // Build &amp; Combat</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap');
+
+:root{
+  --bg:#0a0e13;
+  --panel:rgba(15,20,27,.86);
+  --panel-solid:#131a22;
+  --line:#3a4650;
+  --line-dim:#232c34;
+  --amber:#ffb020;
+  --amber-dim:#8a6218;
+  --steel:#4fa8ff;
+  --steel-dim:#2a5a8a;
+  --danger:#ff3b3b;
+  --danger-dim:#8a2020;
+  --ok:#3ddc84;
+  --text:#dfe7ee;
+  --text-dim:#8496a3;
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-l:env(safe-area-inset-left,0px);
+  --safe-r:env(safe-area-inset-right,0px);
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none;}
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:'Rajdhani',sans-serif;color:var(--text);touch-action:none;}
+#viewport{position:fixed;inset:0;}
+canvas{display:block;outline:none;}
+
+/* ---------- shared HUD panel look ---------- */
+.panel{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-left:3px solid var(--amber);
+  backdrop-filter:blur(6px);
+  border-radius:4px;
+}
+.btn{
+  background:var(--panel);
+  border:1px solid var(--line);
+  color:var(--text);
+  font-family:'Rajdhani',sans-serif;
+  font-weight:600;
+  letter-spacing:.3px;
+  border-radius:6px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  transition:background .1s, border-color .1s, transform .06s;
+}
+.btn:active{transform:scale(.92);}
+.btn.active{border-color:var(--amber);background:rgba(255,176,32,.18);color:var(--amber);}
+.btn.on{background:rgba(255,176,32,.9);color:#1a1200;}
+
+/* ---------- crosshair ---------- */
+#crosshair{
+  position:fixed;left:50%;top:50%;width:22px;height:22px;
+  transform:translate(-50%,-50%);pointer-events:none;z-index:40;
+}
+#crosshair:before,#crosshair:after{content:'';position:absolute;background:rgba(223,231,238,.8);}
+#crosshair:before{left:50%;top:2px;bottom:2px;width:2px;margin-left:-1px;}
+#crosshair:after{top:50%;left:2px;right:2px;height:2px;margin-top:-1px;}
+#crosshair.hidden{display:none;}
+
+/* ---------- top status bar ---------- */
+#topbar{
+  position:fixed; top:calc(10px + var(--safe-t)); left:50%; transform:translate(-50%,0);
+  display:flex; gap:10px; z-index:30; pointer-events:none;
+}
+.stat-chip{
+  padding:6px 14px; font-weight:700; font-size:15px; letter-spacing:.5px;
+  display:flex; align-items:center; gap:6px;
+}
+.stat-chip .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);}
+#modeChip{border-left-color:var(--steel);}
+#modeChip.build{border-left-color:var(--amber);}
+#modeChip.edit{border-left-color:var(--steel);}
+#modeChip.remove{border-left-color:var(--danger);}
+#modeChip.combat{border-left-color:var(--danger);}
+
+/* ---------- health / hitmarker ---------- */
+#hitmarker{
+  position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) rotate(45deg) scale(.6);
+  width:26px;height:26px;pointer-events:none;opacity:0;z-index:41;
+}
+#hitmarker:before,#hitmarker:after{content:'';position:absolute;background:var(--danger);}
+#hitmarker:before{left:50%;top:0;bottom:0;width:3px;margin-left:-1.5px;}
+#hitmarker:after{top:50%;left:0;right:0;height:3px;margin-top:-1.5px;}
+#hitmarker.show{animation:hitflash .22s ease-out;}
+@keyframes hitflash{0%{opacity:1;transform:translate(-50%,-50%) rotate(45deg) scale(1.1);}100%{opacity:0;transform:translate(-50%,-50%) rotate(45deg) scale(.5);}}
+
+#screenFlash{position:fixed;inset:0;pointer-events:none;z-index:39;background:radial-gradient(ellipse at center, transparent 55%, rgba(255,59,59,.35) 100%);opacity:0;transition:opacity .25s;}
+#screenFlash.show{opacity:1;transition:opacity .04s;}
+
+/* ---------- hotbar (build tools) ---------- */
+#hotbar{
+  position:fixed; z-index:30; display:flex; gap:8px;
+  padding:8px; touch-action:none;
+}
+.tool-btn{width:56px;height:56px;font-size:22px;flex-direction:column;gap:2px;position:relative;}
+.tool-btn .lbl{font-size:9px;font-weight:700;letter-spacing:.5px;color:var(--text-dim);}
+.tool-btn.active .lbl{color:var(--amber);}
+.tool-key{position:absolute;top:2px;left:4px;font-size:9px;color:var(--text-dim);}
+
+/* ---------- health / ammo readouts ---------- */
+#healthWrap,#ammoWrap{position:fixed; z-index:30;}
+.readout{padding:8px 12px;min-width:150px;}
+.readout .rlabel{font-size:11px;color:var(--text-dim);letter-spacing:1px;font-weight:700;}
+.readout .rval{font-size:26px;font-weight:700;line-height:1;color:var(--text);}
+.bar-track{height:8px;background:#0006;border-radius:4px;overflow:hidden;margin-top:5px;border:1px solid var(--line-dim);}
+.bar-fill{height:100%;width:100%;background:linear-gradient(90deg,var(--danger-dim),var(--danger));border-radius:4px;transition:width .18s;}
+#ammoWrap .bar-fill{background:linear-gradient(90deg,var(--amber-dim),var(--amber));}
+
+/* ---------- action buttons (fire/jump/turbo/edit) ---------- */
+#actionCluster{position:fixed;z-index:30;display:flex;align-items:flex-end;gap:12px;}
+.big-btn{width:78px;height:78px;border-radius:50%;font-size:13px;flex-direction:column;font-weight:700;}
+.big-btn.fire{background:rgba(255,59,59,.16);border-color:var(--danger);color:#ffb3b3;}
+.big-btn.fire:active,.big-btn.fire.pressed{background:rgba(255,59,59,.55);}
+.mid-btn{width:58px;height:58px;border-radius:50%;font-size:11px;flex-direction:column;font-weight:700;}
+.mid-btn.turbo.pressed{background:rgba(255,176,32,.55);border-color:var(--amber);}
+
+/* ---------- settings / hud gear ---------- */
+#gearBtn{position:fixed; top:calc(10px + var(--safe-t)); right:calc(10px + var(--safe-r)); z-index:35; width:42px;height:42px;font-size:18px;}
+
+/* ---------- settings panel ---------- */
+#settingsOverlay{position:fixed;inset:0;background:rgba(4,6,9,.72);z-index:100;display:none;align-items:center;justify-content:center;padding:20px;}
+#settingsOverlay.show{display:flex;}
+#settingsPanel{
+  width:min(460px,100%);max-height:86vh;overflow:auto;
+  background:var(--panel-solid);border:1px solid var(--line);border-left:3px solid var(--amber);
+  border-radius:8px;padding:22px 22px 18px;
+}
+#settingsPanel h2{margin:0 0 4px;font-size:22px;font-weight:700;letter-spacing:.5px;}
+#settingsPanel .sub{color:var(--text-dim);font-size:13px;margin-bottom:18px;}
+.setting-row{margin-bottom:20px;}
+.setting-row .srow-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;}
+.setting-row label{font-weight:700;font-size:14.5px;}
+.setting-row .val{font-weight:700;color:var(--amber);font-size:14px;}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:3px;
+  background:linear-gradient(90deg,var(--amber-dim),var(--line-dim));outline:none;
+}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--amber);border:2px solid #1a1200;cursor:pointer;}
+input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--amber);border:2px solid #1a1200;cursor:pointer;}
+.divider{height:1px;background:var(--line-dim);margin:18px 0;}
+.hud-list-item{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line-dim);}
+.hud-list-item span{font-weight:600;font-size:14px;}
+.toggle{width:42px;height:24px;border-radius:12px;background:var(--line-dim);position:relative;cursor:pointer;border:1px solid var(--line);flex:none;}
+.toggle .knob{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:var(--text-dim);transition:left .15s, background .15s;}
+.toggle.on{background:rgba(255,176,32,.25);border-color:var(--amber);}
+.toggle.on .knob{left:20px;background:var(--amber);}
+#closeSettings{width:100%;margin-top:6px;padding:12px;font-size:15px;background:var(--amber);color:#1a1200;border:none;font-weight:700;}
+.hint-box{background:#0006;border:1px solid var(--line-dim);border-radius:6px;padding:10px 12px;font-size:12.5px;color:var(--text-dim);line-height:1.5;margin-bottom:18px;}
+
+/* ---------- hud customize mode ---------- */
+.hud-draggable{position:fixed;z-index:31;}
+body.customizing .hud-draggable{outline:1px dashed rgba(255,176,32,.7);outline-offset:4px;cursor:grab;}
+body.customizing .hud-draggable:active{cursor:grabbing;}
+.resize-handle{
+  position:absolute;right:-14px;bottom:-14px;width:26px;height:26px;border-radius:50%;
+  background:var(--amber);border:2px solid #1a1200;display:none;z-index:5;
+  align-items:center;justify-content:center;font-size:12px;color:#1a1200;font-weight:700;
+}
+body.customizing .resize-handle{display:flex;}
+#customizeBanner{
+  position:fixed;top:calc(56px + var(--safe-t));left:50%;transform:translate(-50%,0);
+  z-index:32;display:none;padding:8px 16px;font-size:13px;font-weight:700;color:var(--amber);
+  border-left-color:var(--amber);
+}
+body.customizing #customizeBanner{display:block;}
+body.customizing #exitCustomize{display:flex;}
+#exitCustomize{display:none;position:fixed;bottom:calc(20px + var(--safe-b));left:50%;transform:translate(-50%,0);z-index:33;padding:12px 22px;background:var(--amber);color:#1a1200;border:none;font-weight:700;font-size:14px;border-radius:24px;}
+
+/* ---------- edit mode wall UI ---------- */
+#editQuadPanel{position:fixed;z-index:34;display:none;}
+#editQuadPanel.show{display:block;}
+.quad-grid{width:112px;height:112px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:4px;padding:6px;}
+.quad-cell{background:rgba(79,168,255,.18);border:1px solid var(--steel);border-radius:3px;cursor:pointer;}
+.quad-cell.off{background:rgba(0,0,0,.35);border-color:var(--line-dim);}
+.quad-reset{margin-top:6px;width:100%;padding:6px;font-size:11px;background:rgba(79,168,255,.15);border:1px solid var(--steel);color:var(--steel);}
+#editSensBadge{font-size:10px;color:var(--text-dim);text-align:center;margin-top:4px;}
+
+/* ---------- joystick (mobile) ---------- */
+#joyZone{position:fixed;z-index:25;width:150px;height:150px;touch-action:none;}
+#joyBase{position:absolute;inset:0;border-radius:50%;background:rgba(20,26,33,.55);border:1px solid var(--line);}
+#joyStick{position:absolute;width:58px;height:58px;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:50%;background:rgba(255,176,32,.4);border:1px solid var(--amber);}
+#lookZone{position:fixed;z-index:20;right:0;top:0;bottom:0;width:60%;touch-action:none;}
+
+/* ---------- boot / notice ---------- */
+#bootScreen{position:fixed;inset:0;background:#05070a;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:24px;}
+#bootScreen h1{font-size:clamp(28px,7vw,46px);letter-spacing:2px;margin:0;color:var(--amber);font-weight:700;}
+#bootScreen p{color:var(--text-dim);max-width:440px;line-height:1.6;font-size:14px;margin:0;}
+#startBtn{margin-top:10px;padding:16px 42px;background:var(--amber);color:#1a1200;border:none;font-size:17px;font-weight:700;border-radius:6px;letter-spacing:.5px;cursor:pointer;}
+#toast{position:fixed;bottom:calc(90px + var(--safe-b));left:50%;transform:translate(-50%,10px);z-index:50;padding:8px 16px;font-size:13px;font-weight:600;opacity:0;transition:opacity .2s, transform .2s;border-left-color:var(--steel);pointer-events:none;}
+#toast.show{opacity:1;transform:translate(-50%,0);}
+
+#reloadWrap{position:fixed;left:50%;bottom:calc(150px + var(--safe-b));transform:translate(-50%,0);z-index:30;display:none;flex-direction:column;align-items:center;gap:4px;}
+#reloadWrap.show{display:flex;}
+#reloadWrap .rtxt{font-size:12px;font-weight:700;color:var(--amber);letter-spacing:1px;}
+#reloadBarTrack{width:120px;height:6px;background:#0007;border-radius:3px;overflow:hidden;border:1px solid var(--line-dim);}
+#reloadBarFill{height:100%;width:0%;background:var(--amber);}
+
+#dummyHealthLayer{position:fixed;inset:0;pointer-events:none;z-index:15;}
+.dummy-hp{position:absolute;width:60px;height:8px;transform:translate(-50%,-100%);background:#0007;border:1px solid var(--line-dim);border-radius:3px;overflow:hidden;}
+.dummy-hp .fill{height:100%;background:linear-gradient(90deg,var(--ok),#8fe6ae);width:100%;}
+</style>
+</head>
+<body>
+
+<div id="bootScreen">
+  <h1>SIEGE // BUILD &amp; COMBAT</h1>
+  <p>Grid-präzises Bauen (Wand, Boden, Rampe, Dach) mit Fortnite-Style Editing, Turbo Build und einer Pump-Action Shotgun. Voll Touch-optimiert für Mobile — auf dem Desktop mit Maus &amp; Tastatur (WASD, Maus schauen, Klick = Bauen/Feuern, E = Edit, R = Nachladen, Shift = Turbo halten).</p>
+  <button id="startBtn">BETRETEN</button>
+</div>
+
+<div id="viewport"></div>
+
+<div id="crosshair"></div>
+<div id="hitmarker"></div>
+<div id="screenFlash"></div>
+<div id="dummyHealthLayer"></div>
+
+<div id="topbar">
+  <div class="panel stat-chip" id="modeChip"><span class="dot"></span><span id="modeChipText">BAUEN</span></div>
+  <div class="panel stat-chip" id="levelChip">EBENE <span id="levelVal" style="color:var(--amber);margin-left:4px;">0</span></div>
+</div>
+
+<button class="btn panel hud-draggable" id="gearBtn" data-hud="gear">⚙</button>
+
+<div class="panel hud-draggable" id="healthWrap" data-hud="health">
+  <div class="readout">
+    <div class="rlabel">LEBEN</div>
+    <div class="rval" id="healthVal">100</div>
+    <div class="bar-track"><div class="bar-fill" id="healthBar"></div></div>
+  </div>
+</div>
+
+<div class="panel hud-draggable" id="ammoWrap" data-hud="ammo">
+  <div class="readout">
+    <div class="rlabel">PUMP SHOTGUN</div>
+    <div class="rval" id="ammoVal">8 / 8</div>
+    <div class="bar-track"><div class="bar-fill" id="ammoBar"></div></div>
+  </div>
+</div>
+
+<div class="hud-draggable" id="hotbar" data-hud="hotbar">
+  <button class="btn tool-btn active" data-tool="wall"><span class="tool-key">1</span>▮<span class="lbl">WAND</span></button>
+  <button class="btn tool-btn" data-tool="floor"><span class="tool-key">2</span>▬<span class="lbl">BODEN</span></button>
+  <button class="btn tool-btn" data-tool="ramp"><span class="tool-key">3</span>◢<span class="lbl">RAMPE</span></button>
+  <button class="btn tool-btn" data-tool="roof"><span class="tool-key">4</span>▲<span class="lbl">DACH</span></button>
+  <button class="btn tool-btn" data-tool="remove"><span class="tool-key">5</span>✕<span class="lbl">LÖSCHEN</span></button>
+  <button class="btn tool-btn" data-tool="edit"><span class="tool-key">E</span>◱<span class="lbl">EDIT</span></button>
+</div>
+
+<div id="actionCluster" class="hud-draggable" data-hud="actions">
+  <button class="btn mid-btn" id="jumpBtn">SPRUNG</button>
+  <button class="btn mid-btn turbo" id="turboBtn">TURBO<br>BAU</button>
+  <button class="btn big-btn fire" id="fireBtn">FEUER</button>
+  <button class="btn mid-btn" id="reloadBtn">NACH-<br>LADEN</button>
+</div>
+
+<div id="reloadWrap" class="panel">
+  <div class="rtxt">NACHLADEN...</div>
+  <div id="reloadBarTrack"><div id="reloadBarFill"></div></div>
+</div>
+
+<div id="joyZone"><div id="joyBase"></div><div id="joyStick"></div></div>
+<div id="lookZone"></div>
+
+<div id="editQuadPanel" class="panel">
+  <div class="quad-grid" id="quadGrid">
+    <div class="quad-cell" data-q="TL"></div>
+    <div class="quad-cell" data-q="TR"></div>
+    <div class="quad-cell" data-q="BL"></div>
+    <div class="quad-cell" data-q="BR"></div>
+  </div>
+  <button class="btn quad-reset" id="quadResetBtn">ZURÜCKSETZEN</button>
+  <div id="editSensBadge">Edit-Speed ×<span id="editSensBadgeVal">1.0</span></div>
+</div>
+
+<div class="panel" id="toast"></div>
+
+<div id="customizeBanner" class="panel">HUD-EDITOR AKTIV — Elemente ziehen &amp; skalieren</div>
+<button id="exitCustomize">FERTIG</button>
+
+<div id="settingsOverlay">
+  <div id="settingsPanel">
+    <h2>Einstellungen</h2>
+    <div class="sub">Steuerung, Empfindlichkeit &amp; HUD-Layout anpassen</div>
+
+    <div class="setting-row">
+      <div class="srow-head"><label>Edit-Sensitivity Multiplikator</label><span class="val" id="editSensVal">1.0×</span></div>
+      <input type="range" id="editSensSlider" min="0.5" max="3.0" step="0.1" value="1.0">
+    </div>
+
+    <div class="setting-row">
+      <div class="srow-head"><label>Umsehen-Empfindlichkeit</label><span class="val" id="lookSensVal">1.0×</span></div>
+      <input type="range" id="lookSensSlider" min="0.3" max="2.5" step="0.1" value="1.0">
+    </div>
+
+    <div class="setting-row">
+      <div class="srow-head"><label>Lautstärke</label><span class="val" id="volVal">80%</span></div>
+      <input type="range" id="volSlider" min="0" max="100" step="5" value="80">
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="setting-row">
+      <div class="srow-head"><label>HUD-Editor</label></div>
+      <div class="hint-box">Aktiviere den Editor, um HUD-Elemente frei auf dem Bildschirm zu ziehen und mit dem Ecken-Griff zu skalieren. Änderungen werden automatisch &amp; dauerhaft gespeichert.</div>
+      <button class="btn" id="toggleCustomizeBtn" style="width:100%;padding:12px;border-color:var(--amber);color:var(--amber);">HUD-ELEMENTE ANORDNEN</button>
+    </div>
+
+    <div class="setting-row">
+      <label style="display:block;margin-bottom:6px;">HUD-Elemente Sichtbarkeit</label>
+      <div id="hudVisList"></div>
+    </div>
+
+    <button class="btn" id="closeSettings">SCHLIESSEN</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* =====================================================================
+   CONFIG
+===================================================================== */
+const GRID = 4;            // world units per cell
+const WALL_H = 4;          // wall / level height
+const WALL_T = 0.28;       // wall thickness
+const FLOOR_T = 0.3;
+const MAX_LEVEL = 20;
+const REACH = 9;           // build reach distance
+const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+
+let settings = {
+  editSens: 1.0,
+  lookSens: 1.0,
+  volume: 0.8
+};
+
+/* =====================================================================
+   AUDIO ENGINE (procedural, no external assets)
+===================================================================== */
+const Audio_ = (function(){
+  let ctx = null;
+  function ensure(){ if(!ctx){ try{ ctx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } return ctx; }
+  function noiseBuffer(c, dur){
+    const n = c.sampleRate*dur;
+    const buf = c.createBuffer(1,n,c.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n);
+    return buf;
+  }
+  function gainAt(c, g0, t, atk, rel){
+    const g = c.createGain();
+    g.gain.setValueAtTime(0.0001, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(Math.max(g0,0.001), c.currentTime+atk);
+    g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime+atk+rel);
+    return g;
+  }
+  function vol(){ return settings.volume; }
+
+  function shot(){
+    const c = ensure(); if(!c) return;
+    // low boom
+    const o = c.createOscillator(); o.type='triangle'; o.frequency.setValueAtTime(140,c.currentTime); o.frequency.exponentialRampToValueAtTime(45,c.currentTime+.18);
+    const g = gainAt(c,0.9*vol(),c.currentTime,.005,.22);
+    o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+.25);
+    // noise blast
+    const src = c.createBufferSource(); src.buffer = noiseBuffer(c,.3);
+    const filt = c.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=2600;
+    const g2 = gainAt(c,0.85*vol(),c.currentTime,.002,.18);
+    src.connect(filt); filt.connect(g2); g2.connect(c.destination); src.start();
+  }
+  function pumpSound(){
+    const c = ensure(); if(!c) return;
+    [0,.09].forEach((t,i)=>{
+      const src = c.createBufferSource(); src.buffer = noiseBuffer(c,.06);
+      const filt = c.createBiquadFilter(); filt.type='bandpass'; filt.frequency.value = i===0?1400:900; filt.Q.value=2.2;
+      const g = c.createGain(); g.gain.setValueAtTime(0.0001,c.currentTime+t);
+      g.gain.exponentialRampToValueAtTime(0.55*vol(),c.currentTime+t+.006);
+      g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+t+.08);
+      src.connect(filt); filt.connect(g); g.connect(c.destination);
+      src.start(c.currentTime+t);
+    });
+  }
+  function place(valid){
+    const c = ensure(); if(!c) return;
+    const o = c.createOscillator(); o.type='square'; o.frequency.setValueAtTime(valid?220:110,c.currentTime);
+    o.frequency.exponentialRampToValueAtTime(valid?440:80,c.currentTime+.08);
+    const g = gainAt(c,0.35*vol(),c.currentTime,.004,.09);
+    o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+.12);
+  }
+  function deny(){
+    const c = ensure(); if(!c) return;
+    const o = c.createOscillator(); o.type='sawtooth'; o.frequency.setValueAtTime(90,c.currentTime);
+    const g = gainAt(c,0.28*vol(),c.currentTime,.002,.14);
+    o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+.16);
+  }
+  function editTick(){
+    const c = ensure(); if(!c) return;
+    const o = c.createOscillator(); o.type='sine'; o.frequency.value=700;
+    const g = gainAt(c,0.22*vol(),c.currentTime,.002,.06);
+    o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+.08);
+  }
+  function hitMark(){
+    const c = ensure(); if(!c) return;
+    const o = c.createOscillator(); o.type='square'; o.frequency.value=1100;
+    const g = gainAt(c,0.3*vol(),c.currentTime,.001,.05);
+    o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+.07);
+  }
+  function reloadDone(){
+    const c = ensure(); if(!c) return;
+    [0,.06].forEach((t,i)=>{
+      const o = c.createOscillator(); o.type='triangle'; o.frequency.value = i===0?500:760;
+      const g = c.createGain(); g.gain.setValueAtTime(0.0001,c.currentTime+t);
+      g.gain.exponentialRampToValueAtTime(.35*vol(),c.currentTime+t+.01);
+      g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+t+.15);
+      o.connect(g); g.connect(c.destination); o.start(c.currentTime+t); o.stop(c.currentTime+t+.16);
+    });
+  }
+  function footstep(){
+    const c = ensure(); if(!c) return;
+    const src = c.createBufferSource(); src.buffer = noiseBuffer(c,.05);
+    const filt = c.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=500;
+    const g = gainAt(c,0.12*vol(),c.currentTime,.002,.05);
+    src.connect(filt); filt.connect(g); g.connect(c.destination); src.start();
+  }
+  return {ensure, shot, pumpSound, place, deny, editTick, hitMark, reloadDone, footstep};
+})();
+
+/* =====================================================================
+   THREE.JS SCENE
+===================================================================== */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x8fb8d8);
+scene.fog = new THREE.Fog(0x8fb8d8, 40, 170);
+
+const camera = new THREE.PerspectiveCamera(74, innerWidth/innerHeight, 0.05, 500);
+const renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('viewport').appendChild(renderer.domElement);
+
+const hemi = new THREE.HemisphereLight(0xbfd9ff, 0x33291a, 0.75);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff3d8, 1.15);
+sun.position.set(60,90,30);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.left=-90; sun.shadow.camera.right=90; sun.shadow.camera.top=90; sun.shadow.camera.bottom=-90;
+sun.shadow.camera.far = 260;
+sun.shadow.bias=-0.0004;
+scene.add(sun);
+
+// ground
+const groundMat = new THREE.MeshStandardMaterial({color:0x4c6b3f, roughness:1});
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(600,600), groundMat);
+ground.rotation.x=-Math.PI/2; ground.receiveShadow=true;
+scene.add(ground);
+
+// faint grid overlay to sell "grid snapping"
+const gridHelper = new THREE.GridHelper(600, 600/GRID, 0x223322, 0x2c4326);
+gridHelper.position.y = 0.02;
+gridHelper.material.opacity = 0.35; gridHelper.material.transparent = true;
+scene.add(gridHelper);
+
+// scattered scenery so world doesn't feel empty
+(function scenery(){
+  const trunkMat = new THREE.MeshStandardMaterial({color:0x5b4028, roughness:1});
+  const leafMat = new THREE.MeshStandardMaterial({color:0x2f6b34, roughness:.9});
+  for(let i=0;i<26;i++){
+    const a = Math.random()*Math.PI*2, r = 26+Math.random()*140;
+    const x = Math.cos(a)*r, z = Math.sin(a)*r;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.5,3.2,7), trunkMat);
+    trunk.position.set(x,1.6,z); trunk.castShadow=true;
+    const leaf = new THREE.Mesh(new THREE.ConeGeometry(1.8,4,7), leafMat);
+    leaf.position.set(x,4.6,z); leaf.castShadow=true;
+    scene.add(trunk, leaf);
+  }
+})();
+
+/* =====================================================================
+   MATERIALS FOR BUILDINGS
+===================================================================== */
+const matWall = new THREE.MeshStandardMaterial({color:0xb8a888, roughness:.85, metalness:.05});
+const matFloor = new THREE.MeshStandardMaterial({color:0x8a7a5f, roughness:.9});
+const matRamp = new THREE.MeshStandardMaterial({color:0x9c8b6d, roughness:.9});
+const matRoof = new THREE.MeshStandardMaterial({color:0x7a6248, roughness:.85});
+const ghostGreenMat = new THREE.MeshBasicMaterial({color:0x3ddc84, transparent:true, opacity:.45, depthWrite:false});
+const ghostRedMat = new THREE.MeshBasicMaterial({color:0xff3b3b, transparent:true, opacity:.45, depthWrite:false});
+const edgeGreenMat = new THREE.LineBasicMaterial({color:0x3ddc84});
+const edgeRedMat = new THREE.LineBasicMaterial({color:0xff3b3b});
+
+/* =====================================================================
+   GEOMETRY FACTORIES  (world-space perfectly grid-locked)
+===================================================================== */
+function wallGeo(){ return new THREE.BoxGeometry(GRID, WALL_H, WALL_T); }
+function floorGeo(){ return new THREE.BoxGeometry(GRID, FLOOR_T, GRID); }
+function quadGeo(){ return new THREE.BoxGeometry(GRID/2-0.01, WALL_H/2-0.01, WALL_T); } // wall quadrant piece
+function rampGeo(){
+  // right triangle profile extruded -> ramp
+  const shape = new THREE.Shape();
+  shape.moveTo(-GRID/2, 0);
+  shape.lineTo(GRID/2, 0);
+  shape.lineTo(GRID/2, WALL_H);
+  shape.lineTo(-GRID/2,0);
+  const geo = new THREE.ExtrudeGeometry(shape, {depth:GRID, bevelEnabled:false});
+  geo.translate(0,0,-GRID/2);
+  geo.rotateY(Math.PI/2);
+  return geo;
+}
+function roofGeo(){
+  const geo = new THREE.ConeGeometry(GRID*0.78, WALL_H*0.62, 4, 1);
+  geo.rotateY(Math.PI/4);
+  return geo;
+}
+
+/* =====================================================================
+   STRUCTURE STORAGE
+   surfaces: key "cx,level,cz" -> {type:'floor'|'ramp'|'roof', rot, mesh}
+   walls:    key "X:cx,level,cz" or "Z:cx,level,cz" -> {mesh, quads:[bool*4], group}
+===================================================================== */
+const surfaces = new Map();
+const walls = new Map();
+const collidables = []; // {mesh, box3} refreshed lazily for simple collision & standing surfaces
+
+function cellCenter(cx,cz){ return new THREE.Vector3(cx*GRID, 0, cz*GRID); }
+
+function addCollidable(mesh){
+  collidables.push(mesh);
+}
+function removeCollidable(mesh){
+  const i = collidables.indexOf(mesh); if(i>=0) collidables.splice(i,1);
+}
+
+function makeSurfaceMesh(type, rot){
+  let geo, mat;
+  if(type==='floor'){ geo=floorGeo(); mat=matFloor; }
+  else if(type==='ramp'){ geo=rampGeo(); mat=matRamp; }
+  else { geo=roofGeo(); mat=matRoof; }
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow=true; mesh.receiveShadow=true;
+  mesh.rotation.y = rot*Math.PI/2;
+  return mesh;
+}
+
+function placeSurface(cx, level, cz, type, rot){
+  const key = cx+','+level+','+cz;
+  const existing = surfaces.get(key);
+  if(existing){
+    if(existing.type===type) return false; // identical already there
+    scene.remove(existing.mesh); removeCollidable(existing.mesh);
+    surfaces.delete(key);
+    spawnParticles(existing.mesh.position.clone(), 0xff8844);
+  }
+  const mesh = makeSurfaceMesh(type, rot);
+  mesh.position.set(cx*GRID, level*WALL_H + (type==='floor'?FLOOR_T/2:0), cz*GRID);
+  scene.add(mesh);
+  addCollidable(mesh);
+  surfaces.set(key, {type, rot, mesh, level});
+  spawnParticles(mesh.position.clone(), 0x3ddc84);
+  return true;
+}
+function removeSurface(cx,level,cz){
+  const key = cx+','+level+','+cz;
+  const s = surfaces.get(key);
+  if(!s) return false;
+  scene.remove(s.mesh); removeCollidable(s.mesh);
+  surfaces.delete(key);
+  spawnParticles(s.mesh.position.clone(), 0xff8844);
+  return true;
+}
+
+function wallWorldTransform(axis, cx, level, cz){
+  // axis 'X' => wall segment between (cx,cz) and (cx+1,cz), runs along Z, positioned at x+0.5 cell
+  // axis 'Z' => wall segment between (cx,cz) and (cx,cz+1), runs along X, positioned at z+0.5 cell
+  let x,z,ry;
+  if(axis==='X'){ x = cx*GRID+GRID/2; z = cz*GRID; ry = Math.PI/2; }
+  else { x = cx*GRID; z = cz*GRID+GRID/2; ry = 0; }
+  const y = level*WALL_H + WALL_H/2;
+  return {x,y,z,ry};
+}
+
+function buildWallGroup(){
+  const g = new THREE.Group();
+  const offs = {TL:[-GRID/4, WALL_H/4], TR:[GRID/4, WALL_H/4], BL:[-GRID/4,-WALL_H/4], BR:[GRID/4,-WALL_H/4]};
+  for(const k in offs){
+    const m = new THREE.Mesh(quadGeo(), matWall);
+    m.position.set(offs[k][0], offs[k][1], 0);
+    m.castShadow = true; m.receiveShadow = true;
+    m.userData.quad = k;
+    g.add(m);
+  }
+  return g;
+}
+
+function placeWall(axis, cx, level, cz){
+  const key = axis+':'+cx+','+level+','+cz;
+  if(walls.has(key)) return false;
+  const t = wallWorldTransform(axis,cx,level,cz);
+  const group = buildWallGroup();
+  group.position.set(t.x, t.y, t.z);
+  group.rotation.y = t.ry;
+  scene.add(group);
+  addCollidable(group);
+  const rec = {group, quads:{TL:true,TR:true,BL:true,BR:true}, axis, cx, level, cz};
+  walls.set(key, rec);
+  spawnParticles(new THREE.Vector3(t.x,t.y,t.z), 0x3ddc84);
+  return rec;
+}
+function removeWall(axis,cx,level,cz){
+  const key = axis+':'+cx+','+level+','+cz;
+  const w = walls.get(key);
+  if(!w) return false;
+  scene.remove(w.group); removeCollidable(w.group);
+  walls.delete(key);
+  spawnParticles(w.group.position.clone(), 0xff8844);
+  return true;
+}
+function setWallQuad(rec, quad, visible){
+  rec.quads[quad] = visible;
+  for(const m of rec.group.children){
+    if(m.userData.quad===quad) m.visible = visible;
+  }
+  const anyVisible = Object.values(rec.quads).some(v=>v);
+  if(!anyVisible){
+    const key = rec.axis+':'+rec.cx+','+rec.level+','+rec.cz;
+    scene.remove(rec.group); removeCollidable(rec.group); walls.delete(key);
+  }
+}
+
+/* =====================================================================
+   PARTICLES (lightweight placement / hit feedback)
+===================================================================== */
+const particles = [];
+function spawnParticles(pos, color, count){
+  count = count||8;
+  const geo = new THREE.SphereGeometry(0.06,4,4);
+  const mat = new THREE.MeshBasicMaterial({color});
+  for(let i=0;i<count;i++){
+    const m = new THREE.Mesh(geo, mat.clone());
+    m.position.copy(pos);
+    const v = new THREE.Vector3((Math.random()-0.5)*4, Math.random()*4+1, (Math.random()-0.5)*4);
+    scene.add(m);
+    particles.push({mesh:m, vel:v, life:0.5+Math.random()*0.3, t:0});
+  }
+}
+function updateParticles(dt){
+  for(let i=particles.length-1;i>=0;i--){
+    const p = particles[i];
+    p.t += dt;
+    p.vel.y -= 9*dt;
+    p.mesh.position.addScaledVector(p.vel, dt);
+    p.mesh.material.opacity = Math.max(0, 1-p.t/p.life);
+    p.mesh.material.transparent = true;
+    p.mesh.scale.setScalar(Math.max(0.001,1-p.t/p.life));
+    if(p.t>=p.life){ scene.remove(p.mesh); particles.splice(i,1); }
+  }
+}
+
+/* =====================================================================
+   PLAYER / MOVEMENT
+===================================================================== */
+const player = {
+  pos: new THREE.Vector3(0, 1.75, 10),
+  vel: new THREE.Vector3(),
+  yaw: Math.PI,
+  pitch: -0.05,
+  height: 1.75,
+  radius: 0.4,
+  onGround: false,
+  speed: 6.4,
+  stepTimer: 0
+};
+camera.rotation.order = 'YXZ';
+
+function groundHeightAt(x,z){
+  // Scan nearby surfaces and pick the highest valid standing surface under the player
+  let top = 0;
+  surfaces.forEach((s)=>{
+    const sx = s.mesh.position.x, sz = s.mesh.position.z;
+    if(Math.abs(x-sx) <= GRID/2+0.15 && Math.abs(z-sz) <= GRID/2+0.15){
+      const surfTop = s.level*WALL_H + (s.type==='floor'?FLOOR_T: (s.type==='ramp'?0.4:0.2));
+      if(surfTop > top && surfTop <= player.pos.y + 1.2) top = surfTop;
+    }
+  });
+  return top;
+}
+
+function resolveWallCollision(nextPos){
+  // simple cylinder vs box push-out against nearby wall groups
+  walls.forEach((rec)=>{
+    const wp = rec.group.position;
+    if(Math.abs(nextPos.y - wp.y) > WALL_H) return;
+    let localX, localZ, halfX, halfZ;
+    if(rec.axis==='X'){ // wall runs along Z at fixed X
+      const dx = nextPos.x - wp.x, dz = nextPos.z - wp.z;
+      if(Math.abs(dx) < player.radius+WALL_T/2 && Math.abs(dz) < GRID/2+player.radius){
+        const push = (player.radius+WALL_T/2) - Math.abs(dx);
+        nextPos.x += Math.sign(dx||1)*push;
+      }
+    } else {
+      const dx = nextPos.x - wp.x, dz = nextPos.z - wp.z;
+      if(Math.abs(dz) < player.radius+WALL_T/2 && Math.abs(dx) < GRID/2+player.radius){
+        const push = (player.radius+WALL_T/2) - Math.abs(dz);
+        nextPos.z += Math.sign(dz||1)*push;
+      }
+    }
+  });
+}
+
+/* =====================================================================
+   INPUT STATE
+===================================================================== */
+const keys = {};
+let pointerLocked = false;
+let mouseLookDX=0, mouseLookDY=0;
+let touchLookDX=0, touchLookDY=0;
+
+window.addEventListener('keydown', e=>{
+  keys[e.code]=true;
+  if(e.code==='KeyE') selectTool('edit');
+  if(e.code==='Digit1') selectTool('wall');
+  if(e.code==='Digit2') selectTool('floor');
+  if(e.code==='Digit3') selectTool('ramp');
+  if(e.code==='Digit4') selectTool('roof');
+  if(e.code==='Digit5') selectTool('remove');
+  if(e.code==='KeyR') startReload();
+  if(e.code==='Space'){ tryJump(); e.preventDefault(); }
+});
+window.addEventListener('keyup', e=>{ keys[e.code]=false; });
+
+renderer.domElement.addEventListener('click', ()=>{
+  if(!isTouch && !pointerLocked){ renderer.domElement.requestPointerLock(); }
+});
+document.addEventListener('pointerlockchange', ()=>{
+  pointerLocked = document.pointerLockElement === renderer.domElement;
+});
+document.addEventListener('mousemove', e=>{
+  if(pointerLocked){ mouseLookDX += e.movementX||0; mouseLookDY += e.movementY||0; }
+});
+document.addEventListener('mousedown', e=>{
+  if(!isTouch && pointerLocked){
+    if(e.button===0){ onPrimaryDown(); }
+  }
+});
+document.addEventListener('mouseup', e=>{
+  if(!isTouch && e.button===0){ onPrimaryUp(); }
+});
+document.addEventListener('contextmenu', e=>e.preventDefault());
+document.addEventListener('wheel', e=>{
+  if(currentTool!=='free'){
+    const order=['wall','floor','ramp','roof','remove','edit'];
+    let i = order.indexOf(currentTool);
+    i = (i + (e.deltaY>0?1:-1) + order.length)%order.length;
+    selectTool(order[i]);
+  }
+},{passive:true});
+
+/* =====================================================================
+   TOOLS / MODE STATE
+===================================================================== */
+let currentTool = 'wall'; // wall|floor|ramp|roof|remove|edit
+let heldBuild = false;    // primary action held (mobile fire/build button OR mouse)
+let heldTurbo = false;
+let turboAcc = 0;
+let TURBO_INTERVAL = 0.11; // will be scaled by editSens
+
+const modeChip = document.getElementById('modeChip');
+const modeChipText = document.getElementById('modeChipText');
+const modeNames = {wall:'BAUEN: WAND', floor:'BAUEN: BODEN', ramp:'BAUEN: RAMPE', roof:'BAUEN: DACH', remove:'LÖSCHEN', edit:'EDIT-MODUS'};
+
+function selectTool(t){
+  currentTool = t;
+  document.querySelectorAll('.tool-btn').forEach(b=>b.classList.toggle('active', b.dataset.tool===t));
+  modeChipText.textContent = modeNames[t];
+  modeChip.className = 'panel stat-chip ' + (t==='edit'?'edit':(t==='remove'?'remove':'build'));
+  if(t!=='edit') closeEditPanel();
+  document.getElementById('crosshair').classList.toggle('hidden', false);
+}
+document.querySelectorAll('.tool-btn').forEach(b=>{
+  b.addEventListener('touchstart', e=>{e.preventDefault(); selectTool(b.dataset.tool);}, {passive:false});
+  b.addEventListener('click', ()=>selectTool(b.dataset.tool));
+});
+
+/* =====================================================================
+   BUILD TARGETING  (deterministic grid math -> perfect snapping)
+===================================================================== */
+const raycaster = new THREE.Raycaster();
+raycaster.far = REACH;
+let ghostMesh = null;
+let ghostValid = false;
+let currentTarget = null; // {kind:'surface'|'wall', ...}
+
+function clearGhost(){
+  if(ghostMesh){ scene.remove(ghostMesh); ghostMesh=null; }
+}
+
+function computeAimPoint(){
+  raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+  const targets = collidables.concat([ground]);
+  const hits = raycaster.intersectObjects(targets, false);
+  if(hits.length>0) return hits[0].point.clone();
+  // fallback: point projected forward at REACH*0.8
+  const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+  return camera.position.clone().addScaledVector(dir, REACH*0.75);
+}
+
+function computeBuildTarget(){
+  const P = computeAimPoint();
+  // More stable cell from aim point
+  const cx = Math.floor((P.x + GRID/2) / GRID);
+  const cz = Math.floor((P.z + GRID/2) / GRID);
+
+  // Better level detection: prefer the surface we are aiming at, otherwise player standing height
+  let level = Math.max(0, Math.floor((player.pos.y - player.height + 0.4) / WALL_H));
+  // Override with aim height if significantly different (looking up/down)
+  const aimLevel = Math.max(0, Math.min(MAX_LEVEL, Math.round(P.y / WALL_H)));
+  if(Math.abs(aimLevel - level) <= 1) level = aimLevel;
+  else if(P.y > player.pos.y + 1.5) level = aimLevel; // looking clearly upward
+  level = Math.max(0, Math.min(MAX_LEVEL, level));
+
+  if(currentTool==='floor' || currentTool==='ramp' || currentTool==='roof'){
+    let rot = 0;
+    if(currentTool==='ramp'){
+      const dir=new THREE.Vector3(); camera.getWorldDirection(dir);
+      const ang = Math.atan2(dir.x, dir.z);
+      rot = ((Math.round(ang / (Math.PI/2)) % 4) + 4) % 4;
+    }
+    // Prefer existing surface level under the cell for better stacking
+    const existKey = cx+','+level+','+cz;
+    if(!surfaces.has(existKey) && level > 0){
+      // try one level below if empty
+      const below = surfaces.get(cx+','+(level-1)+','+cz);
+      if(below) level = below.level + 1;
+    }
+    return {kind:'surface', type:currentTool, cx, level, cz, rot};
+  }
+  if(currentTool==='wall'){
+    // Improved wall snapping: choose the edge that is closest to the aim point
+    // and also prefer the side the camera is facing
+    const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+    const faceX = Math.abs(dir.x) > Math.abs(dir.z);
+    const ccx = cx * GRID, ccz = cz * GRID;
+    const dx = P.x - ccx, dz = P.z - ccz;
+
+    const cands = [
+      {axis:'X', cx:cx-1, cz:cz, d:Math.abs(dx + GRID/2), face: dir.x < 0},
+      {axis:'X', cx:cx,   cz:cz, d:Math.abs(dx - GRID/2), face: dir.x > 0},
+      {axis:'Z', cx:cx, cz:cz-1, d:Math.abs(dz + GRID/2), face: dir.z < 0},
+      {axis:'Z', cx:cx, cz:cz,   d:Math.abs(dz - GRID/2), face: dir.z > 0},
+    ];
+    // Sort primarily by distance, then by facing preference
+    cands.sort((a,b)=>{
+      if(Math.abs(a.d - b.d) > 0.15) return a.d - b.d;
+      return (b.face?1:0) - (a.face?1:0);
+    });
+    const best = cands[0];
+    return {kind:'wall', axis:best.axis, cx:best.cx, level, cz:best.cz};
+  }
+  if(currentTool==='remove' || currentTool==='edit'){
+    // target whichever existing structure is directly under crosshair
+    raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+    const hits = raycaster.intersectObjects(collidables, true);
+    if(hits.length===0) return null;
+    let obj = hits[0].object;
+    while(obj.parent && !collidables.includes(obj)) obj = obj.parent;
+    // find matching surface or wall record
+    for(const [key,s] of surfaces){ if(s.mesh===obj) return {kind:'surface-existing', key, rec:s}; }
+    for(const [key,w] of walls){ if(w.group===obj) return {kind:'wall-existing', key, rec:w, hitObject:hits[0].object}; }
+    return null;
+  }
+  return null;
+}
+
+function isSurfaceOccupied(cx,level,cz,type){
+  const s = surfaces.get(cx+','+level+','+cz);
+  return s && s.type===type;
+}
+function isWallOccupied(axis,cx,level,cz){
+  return walls.has(axis+':'+cx+','+level+','+cz);
+}
+
+function updateGhost(){
+  clearGhost();
+  currentTarget = computeBuildTarget();
+  if(!currentTarget){ ghostValid=false; return; }
+
+  if(currentTarget.kind==='surface'){
+    const {type, cx, level, cz, rot} = currentTarget;
+    const occupied = isSurfaceOccupied(cx,level,cz,type);
+    ghostValid = !occupied && level<=MAX_LEVEL;
+    const mesh = makeSurfaceMesh(type, rot);
+    mesh.material = ghostValid?ghostGreenMat:ghostRedMat;
+    mesh.position.set(cx*GRID, level*WALL_H + (type==='floor'?FLOOR_T/2:0), cz*GRID);
+    ghostMesh = mesh;
+    scene.add(ghostMesh);
+  } else if(currentTarget.kind==='wall'){
+    const {axis,cx,level,cz} = currentTarget;
+    const occupied = isWallOccupied(axis,cx,level,cz);
+    ghostValid = !occupied;
+    const t = wallWorldTransform(axis,cx,level,cz);
+    const mesh = new THREE.Mesh(wallGeo(), ghostValid?ghostGreenMat:ghostRedMat);
+    mesh.position.set(t.x,t.y,t.z); mesh.rotation.y=t.ry;
+    ghostMesh = mesh;
+    scene.add(ghostMesh);
+  } else if(currentTarget.kind==='surface-existing' || currentTarget.kind==='wall-existing'){
+    ghostValid = true;
+    const m = currentTarget.kind==='surface-existing' ? currentTarget.rec.mesh : currentTarget.rec.group;
+    const box = new THREE.Box3().setFromObject(m);
+    const helper = new THREE.Box3Helper(box, currentTool==='remove'?0xff3b3b:0x4fa8ff);
+    ghostMesh = helper;
+    scene.add(ghostMesh);
+  }
+}
+
+/* =====================================================================
+   BUILD ACTIONS
+===================================================================== */
+function attemptBuildOnce(){
+  if(!currentTarget){ Audio_.deny(); return; }
+  if(currentTarget.kind==='surface'){
+    const {type,cx,level,cz,rot} = currentTarget;
+    if(isSurfaceOccupied(cx,level,cz,type)){ Audio_.deny(); return; }
+    placeSurface(cx,level,cz,type,rot);
+    Audio_.place(true);
+    flashToast(type==='floor'?'Boden platziert':type==='ramp'?'Rampe platziert':'Dach platziert');
+  } else if(currentTarget.kind==='wall'){
+    const {axis,cx,level,cz} = currentTarget;
+    if(isWallOccupied(axis,cx,level,cz)){ Audio_.deny(); return; }
+    placeWall(axis,cx,level,cz);
+    Audio_.place(true);
+    flashToast('Wand platziert');
+  } else {
+    Audio_.deny();
+  }
+}
+
+function attemptRemove(){
+  if(!currentTarget) return;
+  if(currentTarget.kind==='surface-existing'){
+    const s = currentTarget.rec;
+    removeSurfaceByRef(s);
+    Audio_.place(false);
+    flashToast('Entfernt');
+  } else if(currentTarget.kind==='wall-existing'){
+    const w = currentTarget.rec;
+    removeWall(w.axis,w.cx,w.level,w.cz);
+    Audio_.place(false);
+    flashToast('Entfernt');
+  }
+}
+function removeSurfaceByRef(s){
+  for(const [key,val] of surfaces){ if(val===s){ scene.remove(val.mesh); removeCollidable(val.mesh); surfaces.delete(key); spawnParticles(val.mesh.position.clone(),0xff8844); return; } }
+}
+
+/* =====================================================================
+   EDIT MODE (Fortnite-style quadrant editing on walls)
+===================================================================== */
+let editingWallRec = null;
+const editPanel = document.getElementById('editQuadPanel');
+const quadGridEl = document.getElementById('quadGrid');
+
+function openEditPanel(rec){
+  editingWallRec = rec;
+  editPanel.classList.add('show');
+  refreshQuadUI();
+  positionEditPanel();
+}
+function closeEditPanel(){
+  editingWallRec = null;
+  editPanel.classList.remove('show');
+}
+function refreshQuadUI(){
+  if(!editingWallRec) return;
+  quadGridEl.querySelectorAll('.quad-cell').forEach(el=>{
+    const q = el.dataset.q;
+    el.classList.toggle('off', !editingWallRec.quads[q]);
+  });
+}
+function positionEditPanel(){
+  if(!editingWallRec) return;
+  const wp = editingWallRec.group.position.clone();
+  wp.project(camera);
+  const x = (wp.x*0.5+0.5)*innerWidth;
+  const y = (-wp.y*0.5+0.5)*innerHeight;
+  editPanel.style.left = Math.min(innerWidth-140, Math.max(10,x-70))+'px';
+  editPanel.style.top = Math.min(innerHeight-190, Math.max(10,y-140))+'px';
+}
+quadGridEl.querySelectorAll('.quad-cell').forEach(el=>{
+  function toggle(){
+    if(!editingWallRec) return;
+    const q = el.dataset.q;
+    setWallQuad(editingWallRec, q, !editingWallRec.quads[q]);
+    Audio_.editTick();
+    if(!walls.has(editingWallRec.axis+':'+editingWallRec.cx+','+editingWallRec.level+','+editingWallRec.cz)){
+      closeEditPanel();
+    } else refreshQuadUI();
+  }
+  el.addEventListener('click', toggle);
+  el.addEventListener('touchstart', e=>{e.preventDefault(); toggle();}, {passive:false});
+});
+document.getElementById('quadResetBtn').addEventListener('click', ()=>{
+  if(!editingWallRec) return;
+  ['TL','TR','BL','BR'].forEach(q=>setWallQuad(editingWallRec,q,true));
+  refreshQuadUI(); Audio_.editTick();
+});
+
+function tryEditSelect(){
+  if(!currentTarget || currentTarget.kind!=='wall-existing'){ 
+    closeEditPanel();
+    return;
+  }
+  openEditPanel(currentTarget.rec);
+}
+
+/* =====================================================================
+   PRIMARY ACTION (build / remove / edit-select / fire depending on tool)
+===================================================================== */
+function onPrimaryDown(){
+  heldBuild = true;
+  if(currentTool==='edit'){ tryEditSelect(); return; }
+  if(currentTool==='remove'){ attemptRemove(); return; }
+  attemptBuildOnce();
+}
+function onPrimaryUp(){ heldBuild = false; }
+
+/* =====================================================================
+   COMBAT: PUMP SHOTGUN
+===================================================================== */
+const weapon = {
+  ammo: 8, maxAmmo: 8,
+  canFire: true,
+  pumping: false,
+  reloading: false,
+  recoilPitch: 0, recoilYaw:0,
+  kick: 0
+};
+
+// gun model rig attached to camera
+const gunRig = new THREE.Group();
+camera.add(gunRig);
+scene.add(camera);
+(function buildGun(){
+  const metal = new THREE.MeshStandardMaterial({color:0x2b2b2b, roughness:.4, metalness:.7});
+  const wood = new THREE.MeshStandardMaterial({color:0x5a3a22, roughness:.7});
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.028,0.032,0.85,10), metal);
+  barrel.rotation.z = Math.PI/2; barrel.position.set(0.28,-0.28,-0.85);
+  const pump = new THREE.Mesh(new THREE.BoxGeometry(0.09,0.09,0.32), wood);
+  pump.position.set(0.28,-0.32,-0.62); pump.name='pump';
+  const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.11,0.14,0.42), metal);
+  receiver.position.set(0.28,-0.26,-0.35);
+  const stock = new THREE.Mesh(new THREE.BoxGeometry(0.1,0.13,0.42), wood);
+  stock.position.set(0.28,-0.28,0.05);
+  gunRig.add(barrel, pump, receiver, stock);
+  gunRig.position.set(0,0,0);
+})();
+const pumpMesh = gunRig.children[1];
+const pumpRestZ = pumpMesh.position.z;
+
+// muzzle flash light + sprite
+const muzzleLight = new THREE.PointLight(0xffd27a, 0, 6, 2);
+muzzleLight.position.set(0.28,-0.24,-1.3);
+gunRig.add(muzzleLight);
+
+function fireWeapon(){
+  if(weapon.reloading || !weapon.canFire || weapon.ammo<=0){
+    if(weapon.ammo<=0 && !weapon.reloading){ startReload(); }
+    return;
+  }
+  weapon.ammo--; updateAmmoUI();
+  weapon.canFire = false;
+  Audio_.shot();
+
+  // recoil
+  weapon.recoilPitch += 0.085;
+  weapon.recoilYaw += (Math.random()-0.5)*0.02;
+  weapon.kick = 1;
+  muzzleLight.intensity = 6;
+  screenFlashEl.classList.add('show'); setTimeout(()=>screenFlashEl.classList.remove('show'),40);
+
+  // pellets
+  const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+  const origin = camera.getWorldPosition(new THREE.Vector3());
+  let anyHit=false;
+  for(let i=0;i<9;i++){
+    const spread = 0.045;
+    const d = dir.clone();
+    d.x += (Math.random()-0.5)*spread; d.y += (Math.random()-0.5)*spread; d.z += (Math.random()-0.5)*spread;
+    d.normalize();
+    const rc = new THREE.Raycaster(origin, d, 0.05, 45);
+    const hitObjs = dummies.map(t=>t.mesh).concat(collidables);
+    const hits = rc.intersectObjects(hitObjs, true);
+    if(hits.length>0){
+      const hit = hits[0];
+      let obj = hit.object;
+      const dummy = dummies.find(t=> t.mesh===obj || t.mesh.children.includes(obj));
+      if(dummy){
+        anyHit = true;
+        const dist = hit.distance;
+        const falloff = dist<6 ? 1 : Math.max(0.15, 1-(dist-6)/30);
+        const dmg = (dist<5? 26: 14) * falloff;
+        damageDummy(dummy, dmg, hit.point);
+      }
+    }
+  }
+  if(anyHit){ showHitmarker(); }
+
+  // pump cycle (auto-pump after shot; blocks fire until finished)
+  weapon.pumping = true;
+  const pumpDur = 380;
+  const startT = performance.now();
+  setTimeout(()=>Audio_.pumpSound(), 120);
+  const pumpAnim = ()=>{
+    const t = (performance.now()-startT)/pumpDur;
+    if(t>=1){ pumpMesh.position.z = pumpRestZ; weapon.pumping=false; weapon.canFire = weapon.ammo>0; return; }
+    const phase = t<0.5 ? t/0.5 : 1-((t-0.5)/0.5);
+    pumpMesh.position.z = pumpRestZ + phase*0.14;
+    requestAnimationFrame(pumpAnim);
+  };
+  requestAnimationFrame(pumpAnim);
+  if(weapon.ammo<=0){ setTimeout(()=>startReload(), pumpDur+80); }
+}
+
+function startReload(){
+  if(weapon.reloading || weapon.ammo>=weapon.maxAmmo) return;
+  weapon.reloading = true; weapon.canFire=false;
+  const wrap = document.getElementById('reloadWrap'); wrap.classList.add('show');
+  const fill = document.getElementById('reloadBarFill'); fill.style.width='0%';
+  const dur = 1500; const start = performance.now();
+  Audio_.pumpSound();
+  const step = ()=>{
+    const t = Math.min(1,(performance.now()-start)/dur);
+    fill.style.width = (t*100)+'%';
+    if(t<1){ requestAnimationFrame(step); return; }
+    weapon.ammo = weapon.maxAmmo; weapon.reloading=false; weapon.canFire=true;
+    wrap.classList.remove('show');
+    Audio_.reloadDone();
+    updateAmmoUI();
+  };
+  requestAnimationFrame(step);
+}
+
+function updateAmmoUI(){
+  document.getElementById('ammoVal').textContent = weapon.ammo+' / '+weapon.maxAmmo;
+  document.getElementById('ammoBar').style.width = (weapon.ammo/weapon.maxAmmo*100)+'%';
+}
+
+const screenFlashEl = document.getElementById('screenFlash');
+const hitmarkerEl = document.getElementById('hitmarker');
+function showHitmarker(){
+  hitmarkerEl.classList.remove('show'); void hitmarkerEl.offsetWidth;
+  hitmarkerEl.classList.add('show');
+  Audio_.hitMark();
+}
+
+/* =====================================================================
+   DUMMY TARGETS
+===================================================================== */
+const dummies = [];
+const dummyLayer = document.getElementById('dummyHealthLayer');
+function spawnDummy(x,z){
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.42,1.15,4,8), new THREE.MeshStandardMaterial({color:0xc9542f, roughness:.7}));
+  body.position.y = 1.15; body.castShadow=true;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.3,10,8), new THREE.MeshStandardMaterial({color:0xe0c19a, roughness:.6}));
+  head.position.y = 2.05; head.castShadow=true;
+  g.add(body,head);
+  g.position.set(x,0,z);
+  scene.add(g);
+  const hpEl = document.createElement('div');
+  hpEl.className='dummy-hp panel';
+  hpEl.innerHTML = '<div class="fill"></div>';
+  dummyLayer.appendChild(hpEl);
+  const d = {mesh:g, hp:100, maxHp:100, hpEl, alive:true, respawnT:0};
+  dummies.push(d);
+  addCollidable(g); // block shots/movement lightly (not used for player collision here)
+  return d;
+}
+spawnDummy(6,-2); spawnDummy(-7,-6); spawnDummy(2,-14); spawnDummy(-4,8);
+
+function damageDummy(d, dmg, hitPoint){
+  if(!d.alive) return;
+  d.hp = Math.max(0, d.hp-dmg);
+  spawnParticles(hitPoint.clone(), 0xff5555, 5);
+  if(d.hp<=0){
+    d.alive=false; d.mesh.visible=false; d.hpEl.style.display='none';
+    d.respawnT = 3.5;
+    flashToast('Ziel ausgeschaltet');
+  }
+}
+function updateDummies(dt){
+  dummies.forEach(d=>{
+    if(!d.alive){
+      d.respawnT -= dt;
+      if(d.respawnT<=0){ d.alive=true; d.hp=d.maxHp; d.mesh.visible=true; d.hpEl.style.display='block'; }
+      return;
+    }
+    const headPos = d.mesh.position.clone(); headPos.y += 2.05;
+    headPos.project(camera);
+    if(headPos.z>1){ d.hpEl.style.display='none'; return; }
+    d.hpEl.style.display='block';
+    d.hpEl.style.left = ((headPos.x*0.5+0.5)*innerWidth)+'px';
+    d.hpEl.style.top = ((-headPos.y*0.5+0.5)*innerHeight - 14)+'px';
+    d.hpEl.querySelector('.fill').style.width = (d.hp/d.maxHp*100)+'%';
+  });
+}
+
+/* =====================================================================
+   PLAYER HEALTH (for feel/completeness — slowly regenerates)
+===================================================================== */
+let playerHP = 100;
+function updateHealthUI(){
+  document.getElementById('healthVal').textContent = Math.round(playerHP);
+  document.getElementById('healthBar').style.width = playerHP+'%';
+}
+
+/* =====================================================================
+   TOAST
+===================================================================== */
+let toastT=null;
+function flashToast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(()=>el.classList.remove('show'), 1100);
+}
+
+/* =====================================================================
+   TURBO BUILD LOOP
+===================================================================== */
+function turboTick(dt){
+  if(!heldTurbo) { turboAcc=0; return; }
+  if(currentTool==='edit'){ return; }
+  // Higher editSens = faster turbo build (Fortnite-like)
+  const interval = Math.max(0.045, 0.13 / settings.editSens);
+  turboAcc += dt;
+  while(turboAcc >= interval){
+    turboAcc -= interval;
+    if(currentTool==='remove') attemptRemove(); else attemptBuildOnce();
+  }
+}
+
+/* =====================================================================
+   JUMP
+===================================================================== */
+function tryJump(){
+  if(player.onGround){ player.vel.y = 7.6; player.onGround=false; }
+}
+
+/* =====================================================================
+   TOUCH CONTROLS: joystick + look + buttons
+===================================================================== */
+const joyZone = document.getElementById('joyZone');
+const joyStick = document.getElementById('joyStick');
+let joyActive=false, joyId=null, joyOrigin={x:0,y:0}, joyVec={x:0,y:0};
+
+joyZone.addEventListener('touchstart', e=>{
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  joyActive=true; joyId=t.identifier;
+  const r = joyZone.getBoundingClientRect();
+  joyOrigin.x = r.left+r.width/2; joyOrigin.y = r.top+r.height/2;
+},{passive:false});
+window.addEventListener('touchmove', e=>{
+  for(const t of e.changedTouches){
+    if(joyActive && t.identifier===joyId){
+      let dx=t.clientX-joyOrigin.x, dy=t.clientY-joyOrigin.y;
+      const max=52; const len=Math.hypot(dx,dy);
+      if(len>max){ dx=dx/len*max; dy=dy/len*max; }
+      joyVec.x=dx/max; joyVec.y=dy/max;
+      joyStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+    }
+  }
+},{passive:false});
+window.addEventListener('touchend', e=>{
+  for(const t of e.changedTouches){
+    if(joyActive && t.identifier===joyId){
+      joyActive=false; joyId=null; joyVec.x=0; joyVec.y=0;
+      joyStick.style.transform = 'translate(-50%,-50%)';
+    }
+  }
+});
+
+const lookZone = document.getElementById('lookZone');
+let lookId=null, lastLook={x:0,y:0};
+lookZone.addEventListener('touchstart', e=>{
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  if(lookId===null){ lookId=t.identifier; lastLook.x=t.clientX; lastLook.y=t.clientY; }
+},{passive:false});
+lookZone.addEventListener('touchmove', e=>{
+  e.preventDefault();
+  for(const t of e.changedTouches){
+    if(t.identifier===lookId){
+      touchLookDX += (t.clientX-lastLook.x);
+      touchLookDY += (t.clientY-lastLook.y);
+      lastLook.x=t.clientX; lastLook.y=t.clientY;
+    }
+  }
+},{passive:false});
+lookZone.addEventListener('touchend', e=>{
+  for(const t of e.changedTouches){ if(t.identifier===lookId){ lookId=null; } }
+});
+// tap on look-zone (without dragging much) = primary action, useful on touch devices for edit selection/build in place
+let lookTapStart=null;
+lookZone.addEventListener('touchstart', e=>{ lookTapStart = {x:e.changedTouches[0].clientX,y:e.changedTouches[0].clientY,t:performance.now()}; }, {passive:true});
+lookZone.addEventListener('touchend', e=>{
+  if(!lookTapStart) return;
+  const t = e.changedTouches[0];
+  const dist = Math.hypot(t.clientX-lookTapStart.x, t.clientY-lookTapStart.y);
+  const dt = performance.now()-lookTapStart.t;
+  if(dist<14 && dt<260){ onPrimaryDown(); onPrimaryUp(); }
+  lookTapStart=null;
+});
+
+/* buttons */
+function bindHoldButton(el, onDown, onUp){
+  const down = e=>{ e.preventDefault(); onDown(); el.classList.add('pressed'); };
+  const up = e=>{ e.preventDefault(); onUp(); el.classList.remove('pressed'); };
+  el.addEventListener('touchstart', down, {passive:false});
+  el.addEventListener('touchend', up, {passive:false});
+  el.addEventListener('touchcancel', up, {passive:false});
+  el.addEventListener('mousedown', down);
+  el.addEventListener('mouseup', up);
+  el.addEventListener('mouseleave', up);
+}
+bindHoldButton(document.getElementById('fireBtn'),
+  ()=>{ if(currentTool==='edit'||currentTool==='remove'||['wall','floor','ramp','roof'].includes(currentTool)){ onPrimaryDown(); } fireHeld=true; },
+  ()=>{ onPrimaryUp(); fireHeld=false; }
+);
+let fireHeld=false;
+bindHoldButton(document.getElementById('turboBtn'), ()=>{heldTurbo=true;}, ()=>{heldTurbo=false;});
+document.getElementById('jumpBtn').addEventListener('touchstart', e=>{e.preventDefault(); tryJump();},{passive:false});
+document.getElementById('jumpBtn').addEventListener('click', tryJump);
+document.getElementById('reloadBtn').addEventListener('touchstart', e=>{e.preventDefault(); startReload();},{passive:false});
+document.getElementById('reloadBtn').addEventListener('click', startReload);
+
+// desktop: shift = turbo hold, F = fire dedicated? We map mouse click to build/edit/remove; use separate key for fire so building & shooting don't collide on desktop
+window.addEventListener('keydown', e=>{
+  if(e.code==='ShiftLeft'||e.code==='ShiftRight'){ heldTurbo=true; }
+  if(e.code==='KeyF'){ fireWeapon(); }
+});
+window.addEventListener('keyup', e=>{
+  if(e.code==='ShiftLeft'||e.code==='ShiftRight'){ heldTurbo=false; }
+});
+// also allow right mouse button to fire on desktop
+document.addEventListener('mousedown', e=>{ if(!isTouch && pointerLocked && e.button===2){ fireWeapon(); } });
+
+/* =====================================================================
+   SETTINGS PANEL
+===================================================================== */
+const gearBtn = document.getElementById('gearBtn');
+const settingsOverlay = document.getElementById('settingsOverlay');
+function openSettings(){ settingsOverlay.classList.add('show'); if(pointerLocked) document.exitPointerLock(); }
+function closeSettingsFn(){ settingsOverlay.classList.remove('show'); }
+gearBtn.addEventListener('click', openSettings);
+gearBtn.addEventListener('touchstart', e=>{e.preventDefault(); openSettings();}, {passive:false});
+document.getElementById('closeSettings').addEventListener('click', closeSettingsFn);
+
+const editSensSlider = document.getElementById('editSensSlider');
+const editSensVal = document.getElementById('editSensVal');
+editSensSlider.addEventListener('input', ()=>{
+  settings.editSens = parseFloat(editSensSlider.value);
+  editSensVal.textContent = settings.editSens.toFixed(1)+'×';
+  document.getElementById('editSensBadgeVal').textContent = settings.editSens.toFixed(1);
+  saveSettings();
+});
+const lookSensSlider = document.getElementById('lookSensSlider');
+const lookSensVal = document.getElementById('lookSensVal');
+lookSensSlider.addEventListener('input', ()=>{
+  settings.lookSens = parseFloat(lookSensSlider.value);
+  lookSensVal.textContent = settings.lookSens.toFixed(1)+'×';
+  saveSettings();
+});
+const volSlider = document.getElementById('volSlider');
+const volVal = document.getElementById('volVal');
+volSlider.addEventListener('input', ()=>{
+  settings.volume = parseInt(volSlider.value)/100;
+  volVal.textContent = volSlider.value+'%';
+  saveSettings();
+});
+
+/* =====================================================================
+   PERSISTENT STORAGE (settings + HUD layout)
+===================================================================== */
+function saveSettings(){
+  try{ localStorage.setItem('bc_settings', JSON.stringify(settings)); }catch(e){}
+}
+function loadSettings(){
+  try{
+    const raw = localStorage.getItem('bc_settings');
+    if(raw){
+      const s = JSON.parse(raw);
+      settings = Object.assign(settings, s);
+    }
+  }catch(e){}
+  editSensSlider.value = settings.editSens; editSensVal.textContent = settings.editSens.toFixed(1)+'×';
+  document.getElementById('editSensBadgeVal').textContent = settings.editSens.toFixed(1);
+  lookSensSlider.value = settings.lookSens; lookSensVal.textContent = settings.lookSens.toFixed(1)+'×';
+  volSlider.value = Math.round(settings.volume*100); volVal.textContent = Math.round(settings.volume*100)+'%';
+}
+
+/* ---- HUD customize (drag/scale/visibility), persisted ---- */
+const hudElements = Array.from(document.querySelectorAll('.hud-draggable'));
+let hudLayout = {}; // id -> {left, top, scale, visible}
+const hudNames = {gear:'Einstellungen-Button', health:'Lebensanzeige', ammo:'Munitionsanzeige', hotbar:'Bau-Werkzeugleiste', actions:'Aktions-Buttons'};
+
+function defaultLayoutFor(id, el){
+  const r = el.getBoundingClientRect();
+  return {left:r.left, top:r.top, scale:1, visible:true};
+}
+
+function applyHudLayout(){
+  hudElements.forEach(el=>{
+    const id = el.dataset.hud;
+    const L = hudLayout[id];
+    if(!L) return;
+    el.style.left = L.left+'px';
+    el.style.top = L.top+'px';
+    el.style.right='auto'; el.style.bottom='auto';
+    el.style.transform = `scale(${L.scale})`;
+    el.style.transformOrigin = 'top left';
+    el.style.display = L.visible? '' : 'none';
+  });
+}
+
+function saveHudLayout(){
+  try{ localStorage.setItem('bc_hud_layout', JSON.stringify(hudLayout)); }catch(e){}
+}
+function loadHudLayout(){
+  // set sane initial defaults first (CSS handles initial layout via flow; capture post-layout)
+  requestAnimationFrame(()=>{
+    hudElements.forEach(el=>{ hudLayout[el.dataset.hud] = defaultLayoutFor(el.dataset.hud, el); });
+    try{
+      const raw = localStorage.getItem('bc_hud_layout');
+      if(raw){
+        const saved = JSON.parse(raw);
+        for(const id in saved){ if(hudLayout[id]) hudLayout[id] = Object.assign(hudLayout[id], saved[id]); }
+      }
+    }catch(e){}
+    applyHudLayout();
+    buildHudVisList();
+  });
+}
+
+function buildHudVisList(){
+  const wrap = document.getElementById('hudVisList');
+  wrap.innerHTML='';
+  hudElements.forEach(el=>{
+    const id = el.dataset.hud;
+    const row = document.createElement('div'); row.className='hud-list-item';
+    const name = document.createElement('span'); name.textContent = hudNames[id]||id;
+    const tg = document.createElement('div'); tg.className='toggle'+(hudLayout[id] && hudLayout[id].visible?' on':'');
+    tg.innerHTML='<div class="knob"></div>';
+    tg.addEventListener('click', ()=>{
+      hudLayout[id].visible = !hudLayout[id].visible;
+      tg.classList.toggle('on', hudLayout[id].visible);
+      applyHudLayout(); saveHudLayout();
+    });
+    row.appendChild(name); row.appendChild(tg);
+    wrap.appendChild(row);
+  });
+}
+
+/* draggable + resizable HUD elements */
+let dragEl=null, dragOff={x:0,y:0}, resizeEl=null, resizeStart={x:0,y:0,scale:1};
+function ensureResizeHandle(el){
+  if(el.querySelector('.resize-handle')) return;
+  const h = document.createElement('div'); h.className='resize-handle'; h.textContent='⤡';
+  el.appendChild(h);
+  h.addEventListener('mousedown', e=>{ e.stopPropagation(); resizeEl=el; resizeStart={x:e.clientX,y:e.clientY,scale:hudLayout[el.dataset.hud].scale}; });
+  h.addEventListener('touchstart', e=>{ e.stopPropagation(); e.preventDefault(); const t=e.touches[0]; resizeEl=el; resizeStart={x:t.clientX,y:t.clientY,scale:hudLayout[el.dataset.hud].scale}; },{passive:false});
+}
+hudElements.forEach(el=>{
+  ensureResizeHandle(el);
+  el.addEventListener('mousedown', e=>{
+    if(!document.body.classList.contains('customizing')) return;
+    if(e.target.classList.contains('resize-handle')) return;
+    dragEl = el; const r = el.getBoundingClientRect(); dragOff.x = e.clientX-r.left; dragOff.y = e.clientY-r.top;
+  });
+  el.addEventListener('touchstart', e=>{
+    if(!document.body.classList.contains('customizing')) return;
+    if(e.target.classList.contains('resize-handle')) return;
+    const t = e.touches[0]; dragEl = el; const r = el.getBoundingClientRect(); dragOff.x = t.clientX-r.left; dragOff.y = t.clientY-r.top;
+    e.preventDefault();
+  },{passive:false});
+});
+window.addEventListener('mousemove', e=>{
+  if(dragEl){ const id=dragEl.dataset.hud; hudLayout[id].left = e.clientX-dragOff.x; hudLayout[id].top = e.clientY-dragOff.y; applyHudLayout(); }
+  if(resizeEl){ const id=resizeEl.dataset.hud; const d=(e.clientX-resizeStart.x)*0.006; hudLayout[id].scale = Math.max(0.5, Math.min(2.2, resizeStart.scale + d)); applyHudLayout(); }
+});
+window.addEventListener('touchmove', e=>{
+  if(dragEl){ const t=e.touches[0]; const id=dragEl.dataset.hud; hudLayout[id].left = t.clientX-dragOff.x; hudLayout[id].top = t.clientY-dragOff.y; applyHudLayout(); }
+  if(resizeEl){ const t=e.touches[0]; const id=resizeEl.dataset.hud; const d=(t.clientX-resizeStart.x)*0.006; hudLayout[id].scale = Math.max(0.5, Math.min(2.2, resizeStart.scale + d)); applyHudLayout(); }
+},{passive:true});
+window.addEventListener('mouseup', ()=>{ if(dragEl||resizeEl){ saveHudLayout(); } dragEl=null; resizeEl=null; });
+window.addEventListener('touchend', ()=>{ if(dragEl||resizeEl){ saveHudLayout(); } dragEl=null; resizeEl=null; });
+
+document.getElementById('toggleCustomizeBtn').addEventListener('click', ()=>{
+  document.body.classList.add('customizing');
+  closeSettingsFn();
+});
+document.getElementById('exitCustomize').addEventListener('click', ()=>{
+  document.body.classList.remove('customizing');
+  saveHudLayout();
+});
+
+/* =====================================================================
+   RESIZE
+===================================================================== */
+window.addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* =====================================================================
+   BOOT
+===================================================================== */
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  document.getElementById('bootScreen').style.display='none';
+  Audio_.ensure();
+  if(!isTouch){ renderer.domElement.requestPointerLock(); }
+  updateAmmoUI(); updateHealthUI();
+});
+
+loadSettings();
+loadHudLayout();
+
+/* =====================================================================
+   MAIN LOOP
+===================================================================== */
+let lastT = performance.now();
+function animate(){
+  requestAnimationFrame(animate);
+  const now = performance.now();
+  let dt = (now-lastT)/1000; lastT = now;
+  dt = Math.min(dt, 0.05);
+
+  /* ---- look ---- */
+  const lookSpeedMouse = 0.0022*settings.lookSens;
+  const lookSpeedTouch = 0.0034*settings.lookSens;
+  player.yaw -= mouseLookDX*lookSpeedMouse;
+  player.pitch -= mouseLookDY*lookSpeedMouse;
+  player.yaw -= touchLookDX*lookSpeedTouch;
+  player.pitch -= touchLookDY*lookSpeedTouch;
+  mouseLookDX=0; mouseLookDY=0; touchLookDX=0; touchLookDY=0;
+  player.pitch = Math.max(-1.45, Math.min(1.45, player.pitch));
+
+  /* ---- weapon recoil recover ---- */
+  weapon.recoilPitch *= (1-Math.min(1,dt*9));
+  weapon.recoilYaw *= (1-Math.min(1,dt*9));
+  weapon.kick *= (1-Math.min(1,dt*6));
+  muzzleLight.intensity *= (1-Math.min(1,dt*18));
+
+  camera.rotation.x = player.pitch - weapon.recoilPitch;
+  camera.rotation.y = player.yaw - weapon.recoilYaw;
+
+  /* ---- move ---- */
+  let mx=0, mz=0;
+  if(keys['KeyW']) mz-=1; if(keys['KeyS']) mz+=1;
+  if(keys['KeyA']) mx-=1; if(keys['KeyD']) mx+=1;
+  mx += joyVec.x; mz += joyVec.y;
+  const len = Math.hypot(mx,mz);
+  if(len>0.001){ mx/=Math.max(len,1); mz/=Math.max(len,1); }
+  const fwd = new THREE.Vector3(Math.sin(player.yaw),0,Math.cos(player.yaw));
+  const right = new THREE.Vector3(Math.sin(player.yaw+Math.PI/2),0,Math.cos(player.yaw+Math.PI/2));
+  const moveVec = new THREE.Vector3();
+  moveVec.addScaledVector(fwd, mz).addScaledVector(right, mx);
+  if(moveVec.lengthSq()>0.0001) moveVec.normalize();
+
+  const speed = player.speed;
+  const next = player.pos.clone().addScaledVector(moveVec, speed*dt);
+
+  /* gravity */
+  player.vel.y -= 20*dt;
+  next.y = player.pos.y + player.vel.y*dt;
+
+  resolveWallCollision(next);
+
+  const groundY = groundHeightAt(next.x, next.z) + player.height;
+  if(next.y <= groundY){ next.y = groundY; player.vel.y = 0; player.onGround = true; }
+  else { player.onGround = false; }
+
+  if(moveVec.lengthSq()>0.0001 && player.onGround){
+    player.stepTimer += dt;
+    if(player.stepTimer > 0.34){ player.stepTimer=0; Audio_.footstep(); }
+  }
+
+  player.pos.copy(next);
+  camera.position.copy(player.pos);
+
+  /* view bob */
+  const bobT = now*0.012;
+  const moving = moveVec.lengthSq()>0.0001 && player.onGround;
+  const bobAmt = moving? Math.sin(bobT*1.6)*0.028 : 0;
+  gunRig.position.set(0, -0.02 + bobAmt*0.4 - weapon.kick*0.06, 0.05 + weapon.kick*0.08);
+  gunRig.rotation.x = weapon.kick*0.12;
+  camera.position.y += moving? Math.sin(bobT*1.6)*0.02 : 0;
+
+  /* ---- fire held (mobile) ---- */
+  if(fireHeld) fireWeapon();
+
+  /* ---- build targeting ---- */
+  updateGhost();
+  if(currentTool==='edit' && editingWallRec) positionEditPanel();
+
+  /* ---- turbo build ---- */
+  turboTick(dt);
+
+  /* ---- particles / dummies ---- */
+  updateParticles(dt);
+  updateDummies(dt);
+
+  /* level readout */
+  if(currentTarget){
+    const lvl = currentTarget.level!==undefined?currentTarget.level:(currentTarget.rec?currentTarget.rec.level:0);
+    document.getElementById('levelVal').textContent = lvl;
+  }
+
+  renderer.render(scene, camera);
+}
+animate();
+
+/* prevent page scroll / pinch on mobile */
+document.addEventListener('touchmove', e=>{ if(e.scale && e.scale!==1) e.preventDefault(); }, {passive:false});
+document.addEventListener('gesturestart', e=>e.preventDefault());
+
+})();
+</script>
+</body>
+</html>
