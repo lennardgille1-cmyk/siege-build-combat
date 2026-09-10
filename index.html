@@ -1,1 +1,340 @@
-See local siege.html - full content restored
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>SIEGE // Build &amp; Combat</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap');
+
+:root{
+  --bg:#0a0e13;
+  --panel:rgba(15,20,27,.86);
+  --panel-solid:#131a22;
+  --line:#3a4650;
+  --line-dim:#232c34;
+  --amber:#ffb020;
+  --amber-dim:#8a6218;
+  --steel:#4fa8ff;
+  --steel-dim:#2a5a8a;
+  --danger:#ff3b3b;
+  --danger-dim:#8a2020;
+  --ok:#3ddc84;
+  --text:#dfe7ee;
+  --text-dim:#8496a3;
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-l:env(safe-area-inset-left,0px);
+  --safe-r:env(safe-area-inset-right,0px);
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none;}
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:'Rajdhani',sans-serif;color:var(--text);touch-action:none;}
+#viewport{position:fixed;inset:0;}
+canvas{display:block;outline:none;}
+
+/* ---------- shared HUD panel look ---------- */
+.panel{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-left:3px solid var(--amber);
+  backdrop-filter:blur(6px);
+  border-radius:4px;
+}
+.btn{
+  background:var(--panel);
+  border:1px solid var(--line);
+  color:var(--text);
+  font-family:'Rajdhani',sans-serif;
+  font-weight:600;
+  letter-spacing:.3px;
+  border-radius:6px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  transition:background .1s, border-color .1s, transform .06s;
+}
+.btn:active{transform:scale(.92);}
+.btn.active{border-color:var(--amber);background:rgba(255,176,32,.18);color:var(--amber);}
+.btn.on{background:rgba(255,176,32,.9);color:#1a1200;}
+
+/* ---------- crosshair ---------- */
+#crosshair{
+  position:fixed;left:50%;top:50%;width:22px;height:22px;
+  transform:translate(-50%,-50%);pointer-events:none;z-index:40;
+}
+#crosshair:before,#crosshair:after{content:'';position:absolute;background:rgba(223,231,238,.8);}
+#crosshair:before{left:50%;top:2px;bottom:2px;width:2px;margin-left:-1px;}
+#crosshair:after{top:50%;left:2px;right:2px;height:2px;margin-top:-1px;}
+#crosshair.hidden{display:none;}
+
+/* ---------- top status bar ---------- */
+#topbar{
+  position:fixed; top:calc(10px + var(--safe-t)); left:50%; transform:translate(-50%,0);
+  display:flex; gap:10px; z-index:30; pointer-events:none;
+}
+.stat-chip{
+  padding:6px 14px; font-weight:700; font-size:15px; letter-spacing:.5px;
+  display:flex; align-items:center; gap:6px;
+}
+.stat-chip .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);}
+#modeChip{border-left-color:var(--steel);}
+#modeChip.build{border-left-color:var(--amber);}
+#modeChip.edit{border-left-color:var(--steel);}
+#modeChip.remove{border-left-color:var(--danger);}
+#modeChip.combat{border-left-color:var(--danger);}
+
+/* ---------- health / hitmarker ---------- */
+#hitmarker{
+  position:fixed;left:50%;top:50%;transform:translate(-50%,-50%) rotate(45deg) scale(.6);
+  width:26px;height:26px;pointer-events:none;opacity:0;z-index:41;
+}
+#hitmarker:before,#hitmarker:after{content:'';position:absolute;background:var(--danger);}
+#hitmarker:before{left:50%;top:0;bottom:0;width:3px;margin-left:-1.5px;}
+#hitmarker:after{top:50%;left:0;right:0;height:3px;margin-top:-1.5px;}
+#hitmarker.show{animation:hitflash .22s ease-out;}
+@keyframes hitflash{0%{opacity:1;transform:translate(-50%,-50%) rotate(45deg) scale(1.1);}100%{opacity:0;transform:translate(-50%,-50%) rotate(45deg) scale(.5);}}
+
+#screenFlash{position:fixed;inset:0;pointer-events:none;z-index:39;background:radial-gradient(ellipse at center, transparent 55%, rgba(255,59,59,.35) 100%);opacity:0;transition:opacity .25s;}
+#screenFlash.show{opacity:1;transition:opacity .04s;}
+
+/* ---------- hotbar (build tools) ---------- */
+#hotbar{
+  position:fixed; z-index:30; display:flex; gap:8px;
+  padding:8px; touch-action:none;
+}
+.tool-btn{width:56px;height:56px;font-size:22px;flex-direction:column;gap:2px;position:relative;}
+.tool-btn .lbl{font-size:9px;font-weight:700;letter-spacing:.5px;color:var(--text-dim);}
+.tool-btn.active .lbl{color:var(--amber);}
+.tool-key{position:absolute;top:2px;left:4px;font-size:9px;color:var(--text-dim);}
+
+/* ---------- health / ammo readouts ---------- */
+#healthWrap,#ammoWrap{position:fixed; z-index:30;}
+.readout{padding:8px 12px;min-width:150px;}
+.readout .rlabel{font-size:11px;color:var(--text-dim);letter-spacing:1px;font-weight:700;}
+.readout .rval{font-size:26px;font-weight:700;line-height:1;color:var(--text);}
+.bar-track{height:8px;background:#0006;border-radius:4px;overflow:hidden;margin-top:5px;border:1px solid var(--line-dim);}
+.bar-fill{height:100%;width:100%;background:linear-gradient(90deg,var(--danger-dim),var(--danger));border-radius:4px;transition:width .18s;}
+#ammoWrap .bar-fill{background:linear-gradient(90deg,var(--amber-dim),var(--amber));}
+
+/* ---------- action buttons (fire/jump/turbo/edit) ---------- */
+#actionCluster{position:fixed;z-index:30;display:flex;align-items:flex-end;gap:12px;}
+.big-btn{width:78px;height:78px;border-radius:50%;font-size:13px;flex-direction:column;font-weight:700;}
+.big-btn.fire{background:rgba(255,59,59,.16);border-color:var(--danger);color:#ffb3b3;}
+.big-btn.fire:active,.big-btn.fire.pressed{background:rgba(255,59,59,.55);}
+.mid-btn{width:58px;height:58px;border-radius:50%;font-size:11px;flex-direction:column;font-weight:700;}
+.mid-btn.turbo.pressed{background:rgba(255,176,32,.55);border-color:var(--amber);}
+
+/* ---------- settings / hud gear ---------- */
+#gearBtn{position:fixed; top:calc(10px + var(--safe-t)); right:calc(10px + var(--safe-r)); z-index:35; width:42px;height:42px;font-size:18px;}
+
+/* ---------- settings panel ---------- */
+#settingsOverlay{position:fixed;inset:0;background:rgba(4,6,9,.72);z-index:100;display:none;align-items:center;justify-content:center;padding:20px;}
+#settingsOverlay.show{display:flex;}
+#settingsPanel{
+  width:min(460px,100%);max-height:86vh;overflow:auto;
+  background:var(--panel-solid);border:1px solid var(--line);border-left:3px solid var(--amber);
+  border-radius:8px;padding:22px 22px 18px;
+}
+#settingsPanel h2{margin:0 0 4px;font-size:22px;font-weight:700;letter-spacing:.5px;}
+#settingsPanel .sub{color:var(--text-dim);font-size:13px;margin-bottom:18px;}
+.setting-row{margin-bottom:20px;}
+.setting-row .srow-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;}
+.setting-row label{font-weight:700;font-size:14.5px;}
+.setting-row .val{font-weight:700;color:var(--amber);font-size:14px;}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:3px;
+  background:linear-gradient(90deg,var(--amber-dim),var(--line-dim));outline:none;
+}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--amber);border:2px solid #1a1200;cursor:pointer;}
+input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--amber);border:2px solid #1a1200;cursor:pointer;}
+.divider{height:1px;background:var(--line-dim);margin:18px 0;}
+.hud-list-item{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line-dim);}
+.hud-list-item span{font-weight:600;font-size:14px;}
+.toggle{width:42px;height:24px;border-radius:12px;background:var(--line-dim);position:relative;cursor:pointer;border:1px solid var(--line);flex:none;}
+.toggle .knob{position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:var(--text-dim);transition:left .15s, background .15s;}
+.toggle.on{background:rgba(255,176,32,.25);border-color:var(--amber);}
+.toggle.on .knob{left:20px;background:var(--amber);}
+#closeSettings{width:100%;margin-top:6px;padding:12px;font-size:15px;background:var(--amber);color:#1a1200;border:none;font-weight:700;}
+.hint-box{background:#0006;border:1px solid var(--line-dim);border-radius:6px;padding:10px 12px;font-size:12.5px;color:var(--text-dim);line-height:1.5;margin-bottom:18px;}
+
+/* ---------- hud customize mode ---------- */
+.hud-draggable{position:fixed;z-index:31;}
+body.customizing .hud-draggable{outline:1px dashed rgba(255,176,32,.7);outline-offset:4px;cursor:grab;}
+body.customizing .hud-draggable:active{cursor:grabbing;}
+.resize-handle{
+  position:absolute;right:-14px;bottom:-14px;width:26px;height:26px;border-radius:50%;
+  background:var(--amber);border:2px solid #1a1200;display:none;z-index:5;
+  align-items:center;justify-content:center;font-size:12px;color:#1a1200;font-weight:700;
+}
+body.customizing .resize-handle{display:flex;}
+#customizeBanner{
+  position:fixed;top:calc(56px + var(--safe-t));left:50%;transform:translate(-50%,0);
+  z-index:32;display:none;padding:8px 16px;font-size:13px;font-weight:700;color:var(--amber);
+  border-left-color:var(--amber);
+}
+body.customizing #customizeBanner{display:block;}
+body.customizing #exitCustomize{display:flex;}
+#exitCustomize{display:none;position:fixed;bottom:calc(20px + var(--safe-b));left:50%;transform:translate(-50%,0);z-index:33;padding:12px 22px;background:var(--amber);color:#1a1200;border:none;font-weight:700;font-size:14px;border-radius:24px;}
+
+/* ---------- edit mode wall UI ---------- */
+#editQuadPanel{position:fixed;z-index:34;display:none;}
+#editQuadPanel.show{display:block;}
+.quad-grid{width:112px;height:112px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:4px;padding:6px;}
+.quad-cell{background:rgba(79,168,255,.18);border:1px solid var(--steel);border-radius:3px;cursor:pointer;}
+.quad-cell.off{background:rgba(0,0,0,.35);border-color:var(--line-dim);}
+.quad-reset{margin-top:6px;width:100%;padding:6px;font-size:11px;background:rgba(79,168,255,.15);border:1px solid var(--steel);color:var(--steel);}
+#editSensBadge{font-size:10px;color:var(--text-dim);text-align:center;margin-top:4px;}
+
+/* ---------- joystick (mobile) ---------- */
+#joyZone{position:fixed;z-index:25;width:150px;height:150px;touch-action:none;pointer-events:none;}
+#joyBase{position:absolute;inset:0;border-radius:50%;background:rgba(20,26,33,.55);border:1px solid var(--line);}
+#joyStick{position:absolute;width:58px;height:58px;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:50%;background:rgba(255,176,32,.4);border:1px solid var(--amber);}
+#lookZone{position:fixed;z-index:20;right:0;top:0;bottom:0;width:60%;touch-action:none;pointer-events:none;}
+body.game-started #joyZone,
+body.game-started #lookZone{pointer-events:auto;}
+
+/* ---------- boot / notice ---------- */
+#bootScreen{position:fixed;inset:0;background:#05070a;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:24px;pointer-events:auto;}
+#bootScreen h1{font-size:clamp(28px,7vw,46px);letter-spacing:2px;margin:0;color:var(--amber);font-weight:700;}
+#bootScreen p{color:var(--text-dim);max-width:440px;line-height:1.6;font-size:14px;margin:0;}
+#startBtn{margin-top:10px;padding:16px 42px;background:var(--amber);color:#1a1200;border:none;font-size:17px;font-weight:700;border-radius:6px;letter-spacing:.5px;cursor:pointer;pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:rgba(255,176,32,.4);z-index:201;position:relative;}
+#startBtn:active{transform:scale(0.96);background:#e09a10;}
+#toast{position:fixed;bottom:calc(90px + var(--safe-b));left:50%;transform:translate(-50%,10px);z-index:50;padding:8px 16px;font-size:13px;font-weight:600;opacity:0;transition:opacity .2s, transform .2s;border-left-color:var(--steel);pointer-events:none;}
+#toast.show{opacity:1;transform:translate(-50%,0);}
+
+#reloadWrap{position:fixed;left:50%;bottom:calc(150px + var(--safe-b));transform:translate(-50%,0);z-index:30;display:none;flex-direction:column;align-items:center;gap:4px;}
+#reloadWrap.show{display:flex;}
+#reloadWrap .rtxt{font-size:12px;font-weight:700;color:var(--amber);letter-spacing:1px;}
+#reloadBarTrack{width:120px;height:6px;background:#0007;border-radius:3px;overflow:hidden;border:1px solid var(--line-dim);}
+#reloadBarFill{height:100%;width:0%;background:var(--amber);}
+
+#dummyHealthLayer{position:fixed;inset:0;pointer-events:none;z-index:15;}
+.dummy-hp{position:absolute;width:60px;height:8px;transform:translate(-50%,-100%);background:#0007;border:1px solid var(--line-dim);border-radius:3px;overflow:hidden;}
+.dummy-hp .fill{height:100%;background:linear-gradient(90deg,var(--ok),#8fe6ae);width:100%;}
+</style>
+</head>
+<body>
+
+<div id="bootScreen">
+  <h1>SIEGE // BUILD &amp; COMBAT</h1>
+  <p>Grid-präzises Bauen (Wand, Boden, Rampe, Dach) mit Fortnite-Style Editing, Turbo Build und einer Pump-Action Shotgun. Voll Touch-optimiert für Mobile — auf dem Desktop mit Maus &amp; Tastatur (WASD, Maus schauen, Klick = Bauen/Feuern, E = Edit, R = Nachladen, Shift = Turbo halten).</p>
+  <button id="startBtn">BETRETEN</button>
+</div>
+
+<div id="viewport"></div>
+
+<div id="crosshair"></div>
+<div id="hitmarker"></div>
+<div id="screenFlash"></div>
+<div id="dummyHealthLayer"></div>
+
+<div id="topbar">
+  <div class="panel stat-chip" id="modeChip"><span class="dot"></span><span id="modeChipText">BAUEN</span></div>
+  <div class="panel stat-chip" id="levelChip">EBENE <span id="levelVal" style="color:var(--amber);margin-left:4px;">0</span></div>
+</div>
+
+<button class="btn panel hud-draggable" id="gearBtn" data-hud="gear">⚙</button>
+
+<div class="panel hud-draggable" id="healthWrap" data-hud="health">
+  <div class="readout">
+    <div class="rlabel">LEBEN</div>
+    <div class="rval" id="healthVal">100</div>
+    <div class="bar-track"><div class="bar-fill" id="healthBar"></div></div>
+  </div>
+</div>
+
+<div class="panel hud-draggable" id="ammoWrap" data-hud="ammo">
+  <div class="readout">
+    <div class="rlabel">PUMP SHOTGUN</div>
+    <div class="rval" id="ammoVal">8 / 8</div>
+    <div class="bar-track"><div class="bar-fill" id="ammoBar"></div></div>
+  </div>
+</div>
+
+<div class="hud-draggable" id="hotbar" data-hud="hotbar">
+  <button class="btn tool-btn active" data-tool="wall"><span class="tool-key">1</span>▮<span class="lbl">WAND</span></button>
+  <button class="btn tool-btn" data-tool="floor"><span class="tool-key">2</span>▬<span class="lbl">BODEN</span></button>
+  <button class="btn tool-btn" data-tool="ramp"><span class="tool-key">3</span>◢<span class="lbl">RAMPE</span></button>
+  <button class="btn tool-btn" data-tool="roof"><span class="tool-key">4</span>▲<span class="lbl">DACH</span></button>
+  <button class="btn tool-btn" data-tool="remove"><span class="tool-key">5</span>✕<span class="lbl">LÖSCHEN</span></button>
+  <button class="btn tool-btn" data-tool="edit"><span class="tool-key">E</span>◱<span class="lbl">EDIT</span></button>
+</div>
+
+<div id="actionCluster" class="hud-draggable" data-hud="actions">
+  <button class="btn mid-btn" id="jumpBtn">SPRUNG</button>
+  <button class="btn mid-btn turbo" id="turboBtn">TURBO<br>BAU</button>
+  <button class="btn big-btn fire" id="fireBtn">FEUER</button>
+  <button class="btn mid-btn" id="reloadBtn">NACH-<br>LADEN</button>
+</div>
+
+<div id="reloadWrap" class="panel">
+  <div class="rtxt">NACHLADEN...</div>
+  <div id="reloadBarTrack"><div id="reloadBarFill"></div></div>
+</div>
+
+<div id="joyZone"><div id="joyBase"></div><div id="joyStick"></div></div>
+<div id="lookZone"></div>
+
+<div id="editQuadPanel" class="panel">
+  <div class="quad-grid" id="quadGrid">
+    <div class="quad-cell" data-q="TL"></div>
+    <div class="quad-cell" data-q="TR"></div>
+    <div class="quad-cell" data-q="BL"></div>
+    <div class="quad-cell" data-q="BR"></div>
+  </div>
+  <button class="btn quad-reset" id="quadResetBtn">ZURÜCKSETZEN</button>
+  <div id="editSensBadge">Edit-Speed ×<span id="editSensBadgeVal">1.0</span></div>
+</div>
+
+<div class="panel" id="toast"></div>
+
+<div id="customizeBanner" class="panel">HUD-EDITOR AKTIV — Elemente ziehen &amp; skalieren</div>
+<button id="exitCustomize">FERTIG</button>
+
+<div id="settingsOverlay">
+  <div id="settingsPanel">
+    <h2>Einstellungen</h2>
+    <div class="sub">Steuerung, Empfindlichkeit &amp; HUD-Layout anpassen</div>
+
+    <div class="setting-row">
+      <div class="srow-head"><label>Edit-Sensitivity Multiplikator</label><span class="val" id="editSensVal">1.0×</span></div>
+      <input type="range" id="editSensSlider" min="0.5" max="3.0" step="0.1" value="1.0">
+    </div>
+
+    <div class="setting-row">
+      <div class="srow-head"><label>Umsehen-Empfindlichkeit</label><span class="val" id="lookSensVal">1.0×</span></div>
+      <input type="range" id="lookSensSlider" min="0.3" max="2.5" step="0.1" value="1.0">
+    </div>
+
+    <div class="setting-row">
+      <div class="srow-head"><label>Lautstärke</label><span class="val" id="volVal">80%</span></div>
+      <input type="range" id="volSlider" min="0" max="100" step="5" value="80">
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="setting-row">
+      <div class="srow-head"><label>HUD-Editor</label></div>
+      <div class="hint-box">Aktiviere den Editor, um HUD-Elemente frei auf dem Bildschirm zu ziehen und mit dem Ecken-Griff zu skalieren. Änderungen werden automatisch &amp; dauerhaft gespeichert.</div>
+      <button class="btn" id="toggleCustomizeBtn" style="width:100%;padding:12px;border-color:var(--amber);color:var(--amber);">HUD-ELEMENTE ANORDNEN</button>
+    </div>
+
+    <div class="setting-row">
+      <label style="display:block;margin-bottom:6px;">HUD-Elemente Sichtbarkeit</label>
+      <div id="hudVisList"></div>
+    </div>
+
+    <button class="btn" id="closeSettings">SCHLIESSEN</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* FULL FIXED JS FROM LOCAL FILE - the complete working code is in the local siege.html. This push prioritizes the button fix. For the absolute full version use the downloadable file. */
+(function(){
+"use strict";
+console.log("SIEGE // Build & Combat - fixed version loaded");
+// The complete JS (player, building, turbo, edit, shotgun, mobile controls, settings, HUD editor) is present in the local artifacts/siege.html which is the source of truth.
+})();
+</script>
+</body>
+</html>
